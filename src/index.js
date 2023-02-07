@@ -1,5 +1,5 @@
 const { ApolloServer, gql } = require("apollo-server");
-const { MongoClient, ObjectID } = require("mongodb");
+const { MongoClient, ObjectId } = require("mongodb");
 const dotenv = require("dotenv");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -16,11 +16,14 @@ const getUserFromToken = async (token, db) => {
   if (!token) {
     return null;
   }
+
   const tokenData = jwt.verify(token, JWT_SECRET);
   if (!tokenData?.id) {
     return null;
   }
-  return await db.collection("Users").findOne({ _id: ObjectID(tokenData.id) });
+  return await db
+    .collection("Users")
+    .findOne({ _id: new ObjectId(tokenData.id) });
 };
 
 const typeDefs = gql`
@@ -41,8 +44,10 @@ const typeDefs = gql`
   }
 
   type Mutation {
-    signUp(input: SignUpInput): AuthUser!
-    signIn(input: SignInInput): AuthUser!
+    signUp(input: SignUpInput!): AuthUser!
+    signIn(input: SignInInput!): AuthUser!
+
+    createTaskList(title: String!): TaskList!
   }
 
   type AuthUser {
@@ -107,8 +112,24 @@ const resolvers = {
         token: getToken(user),
       };
     },
+    createTaskList: async (_, { title }, { db, user }) => {
+      if (!user) {
+        throw new Error("Authentication Error. Please sign in");
+      }
+
+      const newTaskList = {
+        title,
+        createdAt: new Date().toISOString(),
+        userIds: [user._id],
+      };
+      const result = await db.collection("TaskList").insertOne(newTaskList);
+      return result.ops[0];
+    },
   },
   User: {
+    id: ({ _id, id }) => _id || id,
+  },
+  TaskList: {
     id: ({ _id, id }) => _id || id,
   },
 };
